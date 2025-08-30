@@ -1,4 +1,3 @@
-pyrogram==2.0.106
-tgcrypto
-pytgcalls==2.1.0
-asyncio
+git add requirements.txt
+git commit -m "Fix pytgcalls dependency"
+git push origin main
