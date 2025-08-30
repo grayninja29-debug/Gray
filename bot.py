@@ -1,9 +1,14 @@
-import asyncio
 from pyrogram import Client, filters
-from pytgcalls import PyTgCalls, idle
-from pytgcalls.types import InputStream, AudioPiped
-from config import API_ID, API_HASH, BOT_TOKEN
+from pytgcalls import PyTgCalls
+from pytgcalls.types.input_stream import InputAudioStream
+import os
 
+# Get from environment (Render → Environment Variables)
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Initialize Pyrogram client
 app = Client(
     "music-bot",
     api_id=API_ID,
@@ -11,50 +16,50 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
+# Initialize PyTgCalls
 pytgcalls = PyTgCalls(app)
 
-@app.on_message(filters.command("start"))
-async def start(_, message):
-    await message.reply_text("🎶 Hello! I’m your Music Bot.\nUse /play <song name> to play in VC.")
 
-@app.on_message(filters.command("play"))
+@app.on_message(filters.command("start") & filters.private)
+async def start(client, message):
+    await message.reply("👋 Hello! I am your Music Bot.\nAdd me to a group and use `/play` to play music.")
+
+
+@app.on_message(filters.command("play") & filters.group)
 async def play(_, message):
     if len(message.command) < 2:
-        return await message.reply_text("❌ Please provide a song name.\nExample: /play Faded")
+        return await message.reply("❌ Please give me a file path or song name after /play")
+    
+    # Here we use a local file path
+    song = message.text.split(" ", 1)[1]
 
-    query = " ".join(message.command[1:])
-    await message.reply_text(f"🔍 Searching and playing **{query}**...")
-
-    import yt_dlp
-    opts = {
-        'format': 'bestaudio',
-        'outtmpl': 'song.%(ext)s',
-        'quiet': True,
-    }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(f"ytsearch1:{query}", download=True)
-        file = ydl.prepare_filename(info['entries'][0])
+    if not os.path.exists(song):
+        return await message.reply("❌ File not found. Upload a valid .mp3 file path.")
 
     chat_id = message.chat.id
-    await pytgcalls.join_group_call(
-        chat_id,
-        InputStream(
-            AudioPiped(file)
-        )
-    )
-    await message.reply_text(f"▶️ Now playing: {info['entries'][0]['title']}")
 
-@app.on_message(filters.command("stop"))
+    try:
+        await pytgcalls.join_group_call(
+            chat_id,
+            InputAudioStream(song)
+        )
+        await message.reply(f"▶️ Playing `{song}` in voice chat!")
+    except Exception as e:
+        await message.reply(f"⚠️ Error: {e}")
+
+
+@app.on_message(filters.command("stop") & filters.group)
 async def stop(_, message):
     chat_id = message.chat.id
-    await pytgcalls.leave_group_call(chat_id)
-    await message.reply_text("⏹ Music stopped.")
+    try:
+        await pytgcalls.leave_group_call(chat_id)
+        await message.reply("⏹️ Stopped playing.")
+    except:
+        await message.reply("❌ No active voice chat to stop.")
 
-async def main():
-    await app.start()
-    await pytgcalls.start()
-    print("✅ Music Bot is running...")
-    await idle()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# Run
+app.start()
+pytgcalls.start()
+print("✅ Bot is running...")
+app.run()
